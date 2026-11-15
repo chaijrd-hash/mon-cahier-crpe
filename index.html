@@ -236,6 +236,12 @@ button { font: inherit; color: inherit; }
 .figs figure { margin: 0; text-align: center; }
 .figs figcaption { font-family: var(--f-hand); font-size: 1.3rem; color: var(--terra); }
 .classe-h { margin-top: 6px; }
+.lock { align-items: center; text-align: center; padding-top: 6vh; }
+.lock-prof { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid var(--sage); }
+.lock-f { display: flex; flex-direction: column; gap: 8px; padding: 16px; width: 100%; max-width: 380px; box-sizing: border-box; text-align: left; }
+.lock-f input { font: inherit; font-size: 16px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
+body.locked .tabbar, body.locked .kit-btn { display: none; }
+
 .cb-list { display: flex; flex-direction: column; gap: 8px; }
 .cb-card { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; text-decoration: none; color: var(--ink); }
 .cb-card .meta { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -461,6 +467,7 @@ body.hl-mode #view { padding-bottom: 120px; }
   function save() {
     state.updated = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    if (sbUser) { sbPush(); return; }
     clearTimeout(cloud.timer); cloud.timer = setTimeout(push, 800);
   }
   function push() {
@@ -493,7 +500,80 @@ body.hl-mode #view { padding-bottom: 120px; }
       });
     }).catch(function (e) { clearTimeout(timer); cloud.status = 'err'; cloud.why = (e && (e.message || e.code)) || 'erreur inconnue'; paintCloud(); });
   }
+  /* ---------- Comptes en ligne (site web hors claude.ai) : Supabase ---------- */
+  var AUTH = {"url": "https://ncqpmaxtqxgxltpdelpv.supabase.co", "key": "sb_publishable_ZSoEADrfQR2_KoHwU98ADA_x_fAwv9I"};
+  var sb = null, sbUser = null;
+  function authOn() { return !!(AUTH && AUTH.url && AUTH.key) && !(window.claude && window.claude.use); }
+  function loadSb(cb) {
+    if (window.supabase) return cb();
+    var s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js';
+    s.onload = cb; s.onerror = function () { viewAuth('login'); authMsg('Impossible de charger la connexion. Vérifie ta connexion internet.'); }; document.head.appendChild(s);
+  }
+  function authMsg(t, ok) { var m = document.getElementById('auMsg'); if (m) { m.textContent = t; m.style.color = ok ? 'var(--sage)' : 'var(--terra)'; } }
+  function viewAuth(mode) {
+    document.body.classList.add('locked');
+    mode = mode || 'login';
+    var T = { login: ['Connexion', 'Se connecter'], signup: ['Créer mon compte', 'Créer mon compte'], forgot: ['Mot de passe oublié', 'Recevoir le lien'], reset: ['Nouveau mot de passe', 'Enregistrer'] }[mode];
+    view.innerHTML = '<div class="stack lock"><img class="lock-prof" src="' + PROF_IMG + '" alt=""><h1>Mon cahier CRPE</h1><p class="muted" style="margin:0">' + (mode === 'signup' ? 'Crée ton compte : ta progression sera gardée en ligne, rien que pour toi.' : mode === 'login' ? 'Connecte-toi pour retrouver ta progression.' : '') + '</p>' +
+      '<form id="auF" class="sheet lock-f"><h2 style="margin:0">' + T[0] + '</h2>' +
+      (mode !== 'reset' ? '<label for="auE"><b>Adresse mail</b></label><input id="auE" type="email" autocomplete="email" required>' : '') +
+      (mode !== 'forgot' ? '<label for="auP"><b>' + (mode === 'reset' ? 'Nouveau mot de passe' : 'Mot de passe') + '</b></label><input id="auP" type="password"' + (mode === 'login' ? '' : ' minlength="8"') + ' autocomplete="' + (mode === 'login' ? 'current-password' : 'new-password') + '" required>' + (mode !== 'login' ? '<small class="muted">8 caractères minimum.</small>' : '') : '') +
+      '<button class="btn" type="submit">' + T[1] + '</button><p class="small" id="auMsg" style="margin:0"></p>' +
+      (mode === 'login' ? '<p class="small" style="margin:0"><a href="#" data-am="forgot">Mot de passe oublié ?</a></p><p class="small" style="margin:0">Pas encore de compte ? <a href="#" data-am="signup"><b>Créer mon compte</b></a></p>' : mode === 'reset' ? '' : '<p class="small" style="margin:0"><a href="#" data-am="login">← Retour à la connexion</a></p>') +
+      '</form></div>';
+    view.querySelectorAll('[data-am]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); viewAuth(a.dataset.am); }); });
+    document.getElementById('auF').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var em = (document.getElementById('auE') || {}).value, pw = (document.getElementById('auP') || {}).value, back = location.origin + location.pathname, p;
+      authMsg('Un instant…', true);
+      if (mode === 'login') p = sb.auth.signInWithPassword({ email: em, password: pw });
+      else if (mode === 'signup') p = sb.auth.signUp({ email: em, password: pw, options: { emailRedirectTo: back } });
+      else if (mode === 'forgot') p = sb.auth.resetPasswordForEmail(em, { redirectTo: back });
+      else p = sb.auth.updateUser({ password: pw });
+      p.then(function (r) {
+        if (r.error) { var m = r.error.message || ''; authMsg(/Invalid login/i.test(m) ? 'Adresse mail ou mot de passe incorrect.' : /not confirmed/i.test(m) ? 'Valide d’abord ton adresse : clique sur le lien reçu par mail.' : /already registered/i.test(m) ? 'Un compte existe déjà avec cette adresse.' : /rate limit/i.test(m) ? 'Trop d’essais, réessaie dans quelques minutes.' : 'Erreur : ' + m); return; }
+        if (mode === 'signup') { if (r.data && r.data.session) return; authMsg('📩 Compte créé ! Ouvre le mail de validation et clique sur le lien pour activer ton compte.', true); }
+        else if (mode === 'forgot') authMsg('📩 Si un compte existe, un lien pour changer ton mot de passe vient d’être envoyé.', true);
+        else if (mode === 'reset') { authMsg('Mot de passe changé ✓', true); setTimeout(function () { location.hash = '#accueil'; location.reload(); }, 900); }
+      });
+    });
+  }
+  var sbTimer = null;
+  function sbPush() {
+    if (!sb || !sbUser) return;
+    clearTimeout(sbTimer); sbTimer = setTimeout(function () {
+      sb.from('progress').upsert({ user_id: sbUser.id, data: state, updated_at: new Date().toISOString() }).then(function (r) {
+        cloud.status = r.error ? 'err' : 'ok'; cloud.why = r.error ? r.error.message : ''; cloud.last = Date.now(); paintCloud();
+      });
+    }, 1000);
+  }
+  function startAuth(go) {
+    loadSb(function () {
+      sb = window.supabase.createClient(AUTH.url, AUTH.key, { auth: { persistSession: true, detectSessionInUrl: true } });
+      var started = false;
+      sb.auth.onAuthStateChange(function (ev, session) {
+        if (ev === 'PASSWORD_RECOVERY') { viewAuth('reset'); return; }
+        if (session && session.user && !started) { started = true; sbUser = session.user; afterLogin(go); }
+        if (!session && started) { location.reload(); }
+      });
+      sb.auth.getSession().then(function (r) { var s = r.data && r.data.session; if (!s && !started) viewAuth('login'); });
+    });
+  }
+  function afterLogin(go) {
+    document.body.classList.remove('locked');
+    KEY = 'mon-cahier-crpe-u-' + sbUser.id; state = load();
+    cloud.status = 'wait'; cloud.who = sbUser.email;
+    sb.from('progress').select('data, updated_at').eq('user_id', sbUser.id).maybeSingle().then(function (r) {
+      var remote = r.data && r.data.data;
+      if (remote && hasData(remote) && (!hasData(state) || (remote.updated || 0) > (state.updated || 0))) { state = remote; try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+      else if (hasData(state)) sbPush();
+      cloud.status = r.error ? 'err' : 'ok'; cloud.why = r.error ? r.error.message : ''; paintCloud();
+      go();
+    });
+  }
+  function logout() { if (sb) sb.auth.signOut().then(function () { location.hash = '#accueil'; location.reload(); }); }
   function cloudText() {
+    if (sbUser && cloud.status === 'ok') return '☁️ Tout est sauvegardé sur ton compte (' + esc(sbUser.email) + ').';
     if (cloud.status === 'ok') return '☁️ Tout est sauvegardé sur ton compte Claude' + (cloud.last ? ' (dernière sauvegarde à ' + new Date(cloud.last).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ')' : '') + '.';
     if (cloud.status === 'wait') return 'Connexion à ton compte…';
     if (cloud.status === 'err') return '⚠️ La sauvegarde en ligne a échoué : ' + esc(cloud.why) + '. Ta progression reste gardée sur cet appareil.';
@@ -1440,9 +1520,11 @@ body.hl-mode #view { padding-bottom: 120px; }
     view.innerHTML = '<div class="stack"><h1>Mon suivi</h1>' + countdown() +
       '<div class="kpis">' + Object.keys(TESTS).map(function (k) { var L = lastResult(k); return '<div class="sheet kpi"><b>' + (L ? on20(L.r) : '–') + '</b><small>' + TESTS[k].title + ' · dernier test /20</small></div>'; }).join('') + '</div>' + historyTable() +
       '<section class="sheet lined"><div class="tag">Ton objectif</div><b>15 à 16/20 aux écrits</b><p class="muted small" style="margin:6px 0 0">Ton tableau de bord se remplit au fil des tests, des exercices et des contrôles.</p></section>' +
+      (sbUser ? '<section class="sheet save"><h2>Mon compte</h2><p class="small" style="margin:6px 0 0">Connectée avec <b>' + esc(sbUser.email) + '</b>. Ta progression n’est visible que par toi.</p><div class="btn-row"><button class="btn ghost" id="auOut">Se déconnecter</button></div></section>' : '') +
       '<section class="sheet save"><h2>Sauvegarde</h2><p class="small" id="cloud" style="margin:6px 0 0">' + cloudText() + '</p>' +
         '<p class="muted small" style="margin:10px 0 0">Sécurité en plus : copie ton code de sauvegarde (dans Notes par exemple). Il te permet de tout récupérer.</p>' +
         '<div class="btn-row"><button class="btn ghost" id="bkCopy">Copier mon code</button><button class="btn ghost" id="bkRestore">Restaurer avec un code</button></div><div id="bkOut"></div></section></div>';
+    var ao = document.getElementById('auOut'); if (ao) ao.addEventListener('click', logout);
     document.getElementById('bkCopy').addEventListener('click', function () {
       var code = 'CAHIER1:' + btoa(unescape(encodeURIComponent(JSON.stringify(state)))), out = document.getElementById('bkOut');
       var show = function (ok) { out.innerHTML = '<p class="small">' + (ok ? 'Code copié. Colle-le dans Notes pour le garder.' : 'Sélectionne tout le code et copie-le :') + '</p><textarea class="code" readonly>' + code + '</textarea>'; };
@@ -1614,7 +1696,7 @@ body.hl-mode #view { padding-bottom: 120px; }
     else viewHome();
     window.scrollTo(0, 0);
   }
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', function () { if (authOn() && !sbUser) return; route(); });
   (function () {
     var K = 'mon-cahier-crpe-theme', b = document.getElementById('themeBtn'), cur = null;
     try { cur = localStorage.getItem(K); } catch (e) {}
@@ -1623,8 +1705,7 @@ body.hl-mode #view { padding-bottom: 120px; }
     b.addEventListener('click', function () { cur = dark() ? 'light' : 'dark'; try { localStorage.setItem(K, cur); } catch (e) {} apply(); });
     apply();
   })();
-  route();
-  connect();
+  if (authOn()) startAuth(function () { route(); }); else { route(); connect(); }
 })();
 </script>
 </body></html>
