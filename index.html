@@ -236,6 +236,9 @@ button { font: inherit; color: inherit; }
 .figs figure { margin: 0; text-align: center; }
 .figs figcaption { font-family: var(--f-hand); font-size: 1.3rem; color: var(--terra); }
 .classe-h { margin-top: 6px; }
+.ch-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.ch-head h1 { margin: 0; }
+.kit-inline { flex: 0 0 auto; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 99px; padding: 7px 12px; font: inherit; font-weight: 800; font-size: .85rem; cursor: pointer; box-shadow: 2px 2px 0 var(--shadow); margin-top: 4px; }
 .lock { align-items: center; text-align: center; padding-top: 6vh; }
 .lock-prof { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid var(--sage); }
 .lock-f { display: flex; flex-direction: column; gap: 8px; padding: 16px; width: 100%; max-width: 380px; box-sizing: border-box; text-align: left; }
@@ -1324,11 +1327,12 @@ body.hl-mode #view { padding-bottom: 120px; }
     else if (step === 'quiz') body = stepQuiz(id);
     else body = (extra === 'note' ? '<section class="sheet score-card"><div class="big-score">' + fr1(cst(id).lastCtrl) + '<small> /20</small></div><div><b>Contrôle noté</b><p class="muted small" style="margin:2px 0 0">Moyenne du chapitre : ' + fr1(ctrlAvg(id)) + '/20' + (ctrlAvg(id) >= 15 ? ' · chapitre maîtrisé ⭐' : '') + '</p></div></section>' : '') + stepCtrl(id, c, cc);
     view.innerHTML = '<div class="stack"><div class="crumb"><a href="#matiere-' + s.id + '">' + s.name + '</a> › Chapitre ' + c.num + '</div>' +
-      '<h1>' + esc(c.title) + '</h1>' +
+      '<div class="ch-head"><h1>' + esc(c.title) + '</h1>' + (cc ? '<button type="button" class="kit-inline" id="kitIn">🧰 Trousse</button>' : '') + '</div>' +
       '<div class="steps" role="tablist">' + STEPS.map(function (st) { return '<button role="tab" data-step="' + st[0] + '" aria-selected="' + (st[0] === step) + '" class="' + (st[0] === step ? 'on' : '') + '">' + st[1] + '</button>'; }).join('') + '</div>' +
-      body + '</div>' + (cc ? kitButton() : '');
+      body + '</div>';
+    var ok0 = document.getElementById('kitBtn'); if (ok0) ok0.remove(); if (cc) document.body.insertAdjacentHTML('beforeend', kitButton());
     hl.id = id; hl.step = step;
-    var kb = document.getElementById('kitBtn'); if (kb) kb.addEventListener('click', function () { openKit(s.id === 'ma' && /exos|quiz|controle/.test(step) ? 'calc' : /cours|fiche/.test(step) ? 'hl' : 'bro', s.id === 'ma'); });
+    var kb = document.getElementById('kitBtn'), ki = document.getElementById('kitIn'); [kb, ki].forEach(function (x) { if (x) x.addEventListener('click', function () { openKit(s.id === 'ma' && /exos|quiz|controle/.test(step) ? 'calc' : /cours|fiche/.test(step) ? 'hl' : 'bro', s.id === 'ma'); }); });
     hlBar(); if (cc) setTimeout(hlPaint, 0);
     var oldKit = document.getElementById('kit'); if (oldKit && !kb) oldKit.remove();
     view.querySelectorAll('.steps button, [data-go]').forEach(function (b) { b.addEventListener('click', function () { viewChapter(id, b.dataset.step || b.dataset.go); window.scrollTo(0, 0); }); });
@@ -1675,6 +1679,7 @@ body.hl-mode #view { padding-bottom: 120px; }
   }
 
   function route() {
+    var kbOld = document.getElementById('kitBtn'); if (kbOld) kbOld.remove();
     stopTick();
     var h = (location.hash || '#accueil').slice(1);
     if (h.indexOf('chap-') !== 0 && hl.on) { hl.on = false; hl.erase = false; hlBar(); document.body.classList.remove('hl-mode'); }
